@@ -2,8 +2,14 @@ import { AppButton } from '@/components/ui/app-button'
 import AppLayout from '@/components/ui/app-layout'
 import { Input } from '@/components/ui/input'
 import chess_pieces from '../assets/images/chess-pieces.png'
+import { ChessApiService } from '@/services/chess-api-service'
+import { useState } from 'react'
 
 export default function HomePage() {
+    const [username, setUsername] = useState('');
+
+    const _chessApiService = new ChessApiService();
+
     return (
         <AppLayout>
             <div className="w-full h-full flex flex-col md:flex-row gap-2 justify-center items-center">
@@ -17,8 +23,16 @@ export default function HomePage() {
                         <Input
                             placeholder="Digite seu username do chess.com"
                             className="w-full md:w-11/12 md:rounded-r-none"
+                            value={username}
+                            onChange={(e) => setUsername(e.currentTarget.value)}
                         />
-                        <AppButton className='md:rounded-l-none'>
+                        <AppButton
+                            onClick={async () => {
+                                const profile = await _chessApiService.getPlayerProfile(username);
+                                console.log(profile);
+                            }}
+                            className='md:rounded-l-none'
+                        >
                             Começar
                         </AppButton>
                     </div>
