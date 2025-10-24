@@ -8,10 +8,17 @@ export class ChessApiService {
     }
 
     async getPlayerProfile(username: string) {
-        console.log('alo');
         const response = await axios.get(`${this.baseUrl}/player/${username}`);
-        console.log(response);
+        return response.data;
+    }
 
+    async getPlayerArchives(username: string) {
+        const response = await axios.get(`${this.baseUrl}/player/${username}/games/archives`);
+        return response.data;
+    }
+
+    async getGamesByMonth(username: string, year: number, month: number) {
+        const response = await axios.get(`${this.baseUrl}/player/${username}/games/${year}/${month.toString().padStart(2, '0')}`);
         return response.data;
     }
 }
