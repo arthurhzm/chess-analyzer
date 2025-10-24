@@ -6,6 +6,7 @@ import HomePage from './pages/home-page'
 import { ThemeProvider } from './contexts/theme-context'
 import { ToastProvider } from './contexts/toast-context'
 import UserPage from './pages/user-page'
+import GamePage from './pages/game-page'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -15,6 +16,7 @@ createRoot(document.getElementById('root')!).render(
           <Routes>
             <Route path='/' element={<HomePage />} />
             <Route path='/:username' element={<UserPage />} />
+            <Route path='/:username/game/:gameId' element={<GamePage />} />
             <Route index element={<HomePage />} />
           </Routes>
         </BrowserRouter>

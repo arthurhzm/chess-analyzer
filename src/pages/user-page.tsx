@@ -2,13 +2,7 @@ import AppLayout from "@/components/ui/app-layout";
 import { ChessApiService } from "@/services/chess-api-service";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 export default function UserPage() {
     const { username } = useParams();
@@ -38,7 +32,7 @@ export default function UserPage() {
             const { year, month } = getMonthAndYearFromArchiveUrl(archiveUrl);
             const games = await _chessApiService.getGamesByMonth(username!, year, month);
             console.log(games);
-            
+
             setGames(games);
         } catch (error) {
             console.error('Error fetching games for selected month:', error);
