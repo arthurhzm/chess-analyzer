@@ -4,19 +4,21 @@ import { Input } from '@/components/ui/input'
 import chess_pieces from '../assets/images/chess-pieces.png'
 import { ChessApiService } from '@/services/chess-api-service'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 export default function HomePage() {
+    const _chessApiService = new ChessApiService();
+    const navigate = useNavigate();
+
     const [username, setUsername] = useState('');
     const [loading, setLoading] = useState(false);
-
-    const _chessApiService = new ChessApiService();
 
     const handleUserSearch = async () => {
         if (!username) return;
         setLoading(true);
         try {
             const profile = await _chessApiService.getPlayerProfile(username);
-            console.log(profile);
+            navigate(`/${profile.username}`);
         } catch (error) {
             console.error('Error fetching player profile:', error);
         } finally {
