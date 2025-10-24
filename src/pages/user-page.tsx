@@ -36,9 +36,9 @@ export default function UserPage() {
     const handleMonthSelect = async (archiveUrl: string) => {
         try {
             const { year, month } = getMonthAndYearFromArchiveUrl(archiveUrl);
-            // const month = parseInt(archiveUrl.split('/').slice(-1)[0]);
-            // const year = parseInt(archiveUrl.split('/').slice(-2)[0]);
             const games = await _chessApiService.getGamesByMonth(username!, year, month);
+            console.log(games);
+            
             setGames(games);
         } catch (error) {
             console.error('Error fetching games for selected month:', error);
@@ -56,7 +56,6 @@ export default function UserPage() {
                     {archives.archives.map((archiveUrl) => {
                         const { year, month } = getMonthAndYearFromArchiveUrl(archiveUrl);
                         const monthName = new Date(year, month - 1).toLocaleString('pt-BR', { month: 'long' });
-
                         return (
                             <SelectItem key={archiveUrl} value={archiveUrl}>
                                 {`${monthName} ${year}`}
@@ -67,7 +66,7 @@ export default function UserPage() {
             </Select>
             {games && games.games.length > 0 && (
                 <div>
-                    <h2>Games for Selected Month:</h2>
+                    <h2>Histórico de partidas ({games.games.length})</h2>
                     <ul>
                         {games.games.map((game, index) => (
                             <li
