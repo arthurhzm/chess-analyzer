@@ -7,8 +7,22 @@ import { useState } from 'react'
 
 export default function HomePage() {
     const [username, setUsername] = useState('');
+    const [loading, setLoading] = useState(false);
 
     const _chessApiService = new ChessApiService();
+
+    const handleUserSearch = async () => {
+        if (!username) return;
+        setLoading(true);
+        try {
+            const profile = await _chessApiService.getPlayerProfile(username);
+            console.log(profile);
+        } catch (error) {
+            console.error('Error fetching player profile:', error);
+        } finally {
+            setLoading(false);
+        }
+    }
 
     return (
         <AppLayout>
@@ -27,10 +41,8 @@ export default function HomePage() {
                             onChange={(e) => setUsername(e.currentTarget.value)}
                         />
                         <AppButton
-                            onClick={async () => {
-                                const profile = await _chessApiService.getPlayerProfile(username);
-                                console.log(profile);
-                            }}
+                            onClick={handleUserSearch}
+                            loading={loading}
                             className='md:rounded-l-none'
                         >
                             Começar
