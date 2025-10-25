@@ -3,11 +3,11 @@ import { useLocation } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
 import { Chess } from "chess.js";
 import type { ChessGame, MoveData, MoveStats, PositionAnalysis } from "@/types/chess";
-import { 
-  parsePGN, 
-  classifyMove, 
-  calculateAccuracy, 
-  calculateMoveStats 
+import {
+  parsePGN,
+  classifyMove,
+  calculateAccuracy,
+  calculateMoveStats
 } from "@/utils/chess-analysis";
 import { useStockfish } from "@/hooks/useStockfish";
 import ChessBoard from "@/components/chess/ChessBoard";
@@ -17,13 +17,14 @@ import MoveAnalysis from "@/components/chess/MoveAnalysis";
 import GameInfo from "@/components/chess/GameInfo";
 import NavigationControls from "@/components/chess/NavigationControls";
 import GameStats from "@/components/chess/GameStats";
-import { Loader2 } from "lucide-react";
+import { Loader2, RotateCcw, Undo } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function GamePage() {
   const { state } = useLocation();
   const game = state?.game as ChessGame;
   console.log(game);
-  
+
 
   const [moves, setMoves] = useState<MoveData[]>([]);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
@@ -41,6 +42,10 @@ export default function GamePage() {
   });
   const [whiteAccuracy, setWhiteAccuracy] = useState(0);
   const [blackAccuracy, setBlackAccuracy] = useState(0);
+  const [isExploringVariation, setIsExploringVariation] = useState(false);
+  const [explorationChess] = useState(() => new Chess());
+  const [showPromotionDialog, setShowPromotionDialog] = useState(false);
+  const [pendingMove, setPendingMove] = useState<{ from: string; to: string } | null>(null);
 
   const { isReady, isAnalyzing, analyzePosition } = useStockfish();
 
@@ -56,7 +61,7 @@ export default function GamePage() {
   // Start analysis when Stockfish is ready AND moves are loaded
   useEffect(() => {
     if (!isReady || moves.length === 0 || isLoadingAnalysis || hasAnalyzed) return;
-    
+
     console.log('Stockfish pronto e movimentos carregados. Iniciando análise...');
     setHasAnalyzed(true);
     analyzeMoves(moves);
@@ -79,10 +84,10 @@ export default function GamePage() {
 
     for (let i = 0; i < movesToAnalyze.length; i++) {
       const move = movesToAnalyze[i];
-      
+
       // Get FEN before the move
       const fenBefore = chess.fen();
-      
+
       // Analyze position before move if not cached
       let analysisBefore: PositionAnalysis;
       if (positionCache.has(fenBefore)) {
@@ -119,8 +124,8 @@ export default function GamePage() {
       });
 
       // Check if move was best
-      const moveWasBest = analysisBefore.bestMove === move.san || 
-                          analysisBefore.bestMove === `${move.from}${move.to}${move.promotion || ''}`;
+      const moveWasBest = analysisBefore.bestMove === move.san ||
+        analysisBefore.bestMove === `${move.from}${move.to}${move.promotion || ''}`;
 
       // Get number of legal moves
       chess.undo();
@@ -181,24 +186,127 @@ export default function GamePage() {
     if (index < -1 || index >= moves.length) return;
 
     setCurrentMoveIndex(index);
+    setIsExploringVariation(false);
 
     if (index === -1) {
       // Start position
-      setCurrentFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+      const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+      setCurrentFen(startFen);
       setCurrentEvaluation(0);
       setCurrentMate(undefined);
+      explorationChess.load(startFen);
     } else {
       const move = moves[index];
       setCurrentFen(move.fen);
       setCurrentEvaluation(move.evaluation || 0);
       setCurrentMate(undefined);
+      explorationChess.load(move.fen);
     }
-  }, [moves]);
+  }, [moves, explorationChess]);
 
   const goToFirst = useCallback(() => goToMove(-1), [goToMove]);
   const goToPrevious = useCallback(() => goToMove(currentMoveIndex - 1), [currentMoveIndex, goToMove]);
-  const goToNext = useCallback(() => goToMove(currentMoveIndex + 1), [currentMoveIndex, goToMove]);
-  const goToLast = useCallback(() => goToMove(moves.length - 1), [moves.length, goToMove]);
+  const goToNext = useCallback(() => {
+    if (isExploringVariation) {
+      // Se estiver explorando, volta para a linha principal
+      setIsExploringVariation(false);
+      goToMove(currentMoveIndex);
+    } else {
+      goToMove(currentMoveIndex + 1);
+    }
+  }, [currentMoveIndex, goToMove, isExploringVariation]);
+  const goToLast = useCallback(() => {
+    setIsExploringVariation(false);
+    goToMove(moves.length - 1);
+  }, [moves.length, goToMove]);
+
+  // Handle piece drop on board
+  const handlePieceDrop = useCallback((sourceSquare: string, targetSquare: string): boolean => {
+    try {
+      // Verifica se é uma promoção de peão
+      const piece = explorationChess.get(sourceSquare as any);
+      const isPromotion = piece?.type === 'p' &&
+        ((piece.color === 'w' && targetSquare[1] === '8') ||
+          (piece.color === 'b' && targetSquare[1] === '1'));
+
+      if (isPromotion) {
+        // Salva o movimento pendente e mostra o diálogo
+        setPendingMove({ from: sourceSquare, to: targetSquare });
+        setShowPromotionDialog(true);
+        return false; // Não completa o movimento ainda
+      }
+
+      // Tenta fazer o movimento normal
+      const move = explorationChess.move({
+        from: sourceSquare,
+        to: targetSquare,
+      });
+
+      if (move === null) {
+        return false; // Movimento ilegal
+      }
+
+      // Movimento válido - atualiza o estado
+      setCurrentFen(explorationChess.fen());
+      setIsExploringVariation(true);
+
+      return true;
+    } catch (error) {
+      console.error('Erro ao fazer movimento:', error);
+      return false;
+    }
+  }, [explorationChess]);
+
+  // Handle promotion piece selection
+  const handlePromotion = useCallback((piece: 'q' | 'r' | 'b' | 'n') => {
+    if (!pendingMove) return;
+
+    try {
+      const move = explorationChess.move({
+        from: pendingMove.from,
+        to: pendingMove.to,
+        promotion: piece,
+      });
+
+      if (move !== null) {
+        setCurrentFen(explorationChess.fen());
+        setIsExploringVariation(true);
+      }
+    } catch (error) {
+      console.error('Erro na promoção:', error);
+    } finally {
+      setShowPromotionDialog(false);
+      setPendingMove(null);
+    }
+  }, [pendingMove, explorationChess]);
+
+  // Reset exploration when clicking on a move from the list
+  const handleMoveClick = useCallback((index: number) => {
+    setIsExploringVariation(false);
+    goToMove(index);
+  }, [goToMove]);
+
+  // Undo last exploration move
+  const handleUndoExploration = useCallback(() => {
+    if (!isExploringVariation) return;
+
+    try {
+      explorationChess.undo();
+      const newFen = explorationChess.fen();
+      setCurrentFen(newFen);
+
+      // Se voltar à posição original, desativa modo de exploração
+      const originalFen = currentMoveIndex === -1
+        ? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        : moves[currentMoveIndex].fen;
+
+      if (newFen === originalFen) {
+        setIsExploringVariation(false);
+      }
+    } catch (error) {
+      console.error('Erro ao desfazer movimento:', error);
+    }
+  }, [explorationChess, isExploringVariation, currentMoveIndex, moves]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -259,7 +367,7 @@ export default function GamePage() {
             <MoveList
               moves={moves}
               currentMoveIndex={currentMoveIndex}
-              onMoveClick={goToMove}
+              onMoveClick={handleMoveClick}
             />
             <GameStats
               whiteStats={whiteStats}
@@ -273,7 +381,41 @@ export default function GamePage() {
           <div className="lg:col-span-6 space-y-4">
             <div className="flex gap-4">
               <div className="flex-1">
-                <ChessBoard fen={currentFen} />
+                <ChessBoard
+                  fen={currentFen}
+                  onPieceDrop={handlePieceDrop}
+                  allowMoves={true}
+                />
+                {isExploringVariation && (
+                  <div className="mt-2 px-4 py-2 bg-yellow-500/20 border border-yellow-500/50 rounded-md flex items-center justify-between gap-2">
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300 font-medium">
+                      🔍 Explorando variação
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleUndoExploration}
+                        className="h-7"
+                      >
+                        <Undo className="w-3 h-3 mr-1" />
+                        Desfazer
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setIsExploringVariation(false);
+                          goToMove(currentMoveIndex);
+                        }}
+                        className="h-7"
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        Resetar
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
               <EvaluationBar evaluation={currentEvaluation} mate={currentMate} />
             </div>
@@ -296,6 +438,55 @@ export default function GamePage() {
             />
           </div>
         </div>
+
+        {/* Promotion Dialog */}
+        {showPromotionDialog && (
+          <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-card rounded-lg border border-border p-6 max-w-sm w-full mx-4">
+              <h3 className="text-lg font-semibold text-foreground mb-4">Escolha a peça de promoção</h3>
+              <div className="grid grid-cols-4 gap-3">
+                <button
+                  onClick={() => handlePromotion('q')}
+                  className="aspect-square bg-accent hover:bg-accent/80 rounded-lg flex items-center justify-center text-4xl transition-colors"
+                  title="Rainha"
+                >
+                  ♛
+                </button>
+                <button
+                  onClick={() => handlePromotion('r')}
+                  className="aspect-square bg-accent hover:bg-accent/80 rounded-lg flex items-center justify-center text-4xl transition-colors"
+                  title="Torre"
+                >
+                  ♜
+                </button>
+                <button
+                  onClick={() => handlePromotion('b')}
+                  className="aspect-square bg-accent hover:bg-accent/80 rounded-lg flex items-center justify-center text-4xl transition-colors"
+                  title="Bispo"
+                >
+                  ♝
+                </button>
+                <button
+                  onClick={() => handlePromotion('n')}
+                  className="aspect-square bg-accent hover:bg-accent/80 rounded-lg flex items-center justify-center text-4xl transition-colors"
+                  title="Cavalo"
+                >
+                  ♞
+                </button>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full mt-4"
+                onClick={() => {
+                  setShowPromotionDialog(false);
+                  setPendingMove(null);
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
