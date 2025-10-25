@@ -90,7 +90,7 @@ export default function HomePage() {
                                                 <Search className="w-4 h-4" />
                                                 Digite seu username do Chess.com
                                             </label>
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-2 flex-col md:flex-row">
                                                 <Input
                                                     placeholder="ex: magnuscarlsen"
                                                     className="flex-1 h-12 text-base bg-background/50 border-2 border-border focus:border-primary transition-all"
