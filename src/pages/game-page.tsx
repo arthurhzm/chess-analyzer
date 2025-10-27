@@ -23,9 +23,6 @@ import { Button } from "@/components/ui/button";
 export default function GamePage() {
   const { state } = useLocation();
   const game = state?.game as ChessGame;
-  console.log(game);
-
-
   const [moves, setMoves] = useState<MoveData[]>([]);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
   const [currentFen, setCurrentFen] = useState("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -120,12 +117,34 @@ export default function GamePage() {
         evalBefore: evalBefore.toFixed(2),
         evalAfter: evalAfter.toFixed(2),
         bestMove: analysisBefore.bestMove,
-        depth: analysisBefore.depth
+        depth: analysisBefore.depth,
+        mateBefore: analysisBefore.mate,
+        mateAfter: analysisAfter.mate
       });
 
       // Check if move was best
-      const moveWasBest = analysisBefore.bestMove === move.san ||
-        analysisBefore.bestMove === `${move.from}${move.to}${move.promotion || ''}`;
+      // Compare both UCI format (e2e4) and also check if it's the same move
+      const moveUCI = `${move.from}${move.to}${move.promotion || ''}`;
+      let moveWasBest = analysisBefore.bestMove === moveUCI;
+      
+      // If not matched directly, try to convert best move to SAN and compare
+      if (!moveWasBest && analysisBefore.bestMove) {
+        chess.undo();
+        try {
+          const bestMoveObj = chess.move({
+            from: analysisBefore.bestMove.slice(0, 2),
+            to: analysisBefore.bestMove.slice(2, 4),
+            promotion: analysisBefore.bestMove[4] as 'q' | 'r' | 'b' | 'n' | undefined,
+          });
+          if (bestMoveObj) {
+            moveWasBest = bestMoveObj.san === move.san;
+            chess.undo();
+          }
+        } catch {
+          // Invalid move format, ignore
+        }
+        chess.move(move.san);
+      }
 
       // Get number of legal moves
       chess.undo();

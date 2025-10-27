@@ -12,6 +12,14 @@ export const classifyMove = (
   if (isBookMove) return 'book';
   if (legalMovesCount === 1) return 'forced';
   
+  // Handle mate situations (evaluation capped at ±100)
+  const isMatePosition = Math.abs(prevEval) >= 100 || Math.abs(currentEval) >= 100;
+  
+  // If position is already mate, all moves are forced/irrelevant
+  if (Math.abs(prevEval) >= 100) {
+    return 'forced';
+  }
+  
   // Evaluation is from white's perspective
   // Positive = white advantage, Negative = black advantage
   // We need to calculate the change from the player's perspective
@@ -24,6 +32,15 @@ export const classifyMove = (
     // For black, losing evaluation means currentEval > prevEval (from black's perspective)
     // Since evals are from white's perspective, black wants more negative numbers
     evalLoss = currentEval - prevEval;
+  }
+  
+  // If we reached mate, it's either brilliant (we mated) or blunder (we got mated)
+  if (isMatePosition && !moveWasBest) {
+    // If we're getting mated (eval going against us), it's a blunder
+    if ((playerColor === 'w' && currentEval <= -100) || 
+        (playerColor === 'b' && currentEval >= 100)) {
+      return 'blunder';
+    }
   }
   
   if (moveWasBest) {

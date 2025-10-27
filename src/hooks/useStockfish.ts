@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { Chess } from 'chess.js';
 import type { PositionAnalysis } from '@/types/chess';
 
 export const useStockfish = () => {
@@ -13,7 +14,7 @@ export const useStockfish = () => {
     const initStockfish = async () => {
       try {
         console.log('Tentando inicializar Stockfish...');
-        
+
         // Create Web Worker from public folder
         const engine = new Worker(new URL('/stockfish.js', import.meta.url), { type: 'classic' });
         engineRef.current = engine;
@@ -33,7 +34,7 @@ export const useStockfish = () => {
         // Initialize engine
         console.log('Enviando comandos UCI...');
         engine.postMessage('uci');
-        
+
         // Wait a bit before sending more commands
         setTimeout(() => {
           engine.postMessage('setoption name MultiPV value 1');
@@ -54,7 +55,7 @@ export const useStockfish = () => {
         engineRef.current.terminate();
       }
     };
-  }, []);  const handleEngineMessage = (message: string) => {
+  }, []); const handleEngineMessage = (message: string) => {
     if (typeof message !== 'string') return;
 
     if (message === 'readyok') {
@@ -96,7 +97,12 @@ export const useStockfish = () => {
     // Parse depth
     const depthIndex = parts.indexOf('depth');
     if (depthIndex !== -1 && parts[depthIndex + 1]) {
-      currentAnalysisRef.current.depth = parseInt(parts[depthIndex + 1]);
+      const depth = parseInt(parts[depthIndex + 1]);
+      // Ignore depth 0 messages (game over positions)
+      if (depth === 0) {
+        return;
+      }
+      currentAnalysisRef.current.depth = depth;
     }
 
     // Parse score
@@ -108,10 +114,16 @@ export const useStockfish = () => {
       if (scoreType === 'cp' && scoreValue) {
         // Centipawn score (convert to pawns)
         currentAnalysisRef.current.evaluation = parseInt(scoreValue) / 100;
+        currentAnalysisRef.current.mate = undefined;
       } else if (scoreType === 'mate' && scoreValue) {
         // Mate score
-        currentAnalysisRef.current.mate = parseInt(scoreValue);
-        currentAnalysisRef.current.evaluation = parseInt(scoreValue) > 0 ? 100 : -100;
+        const mateIn = parseInt(scoreValue);
+        // mate 0 means game is already over
+        if (mateIn === 0) {
+          return;
+        }
+        currentAnalysisRef.current.mate = mateIn;
+        currentAnalysisRef.current.evaluation = mateIn > 0 ? 100 : -100;
       }
     }
 
@@ -140,9 +152,58 @@ export const useStockfish = () => {
           return;
         }
 
+        // Check if game is over (checkmate, stalemate, etc)
+        const chess = new Chess(fen);
+        if (chess.isGameOver()) {
+          let evaluation = 0;
+
+          if (chess.isCheckmate()) {
+            // If white is in checkmate, black won (eval = -100)
+            // If black is in checkmate, white won (eval = +100)
+            evaluation = chess.turn() === 'w' ? -100 : 100;
+          }
+          // For stalemate, draw, etc, evaluation stays 0
+
+          resolve({
+            fen,
+            evaluation,
+            bestMove: '',
+            pvLine: [],
+            depth: 0,
+            mate: chess.isCheckmate() ? 0 : undefined,
+          });
+          return;
+        }
+
         currentAnalysisRef.current = { fen };
         analysisCallbackRef.current = resolve;
         setIsAnalyzing(true);
+
+        // Set timeout to prevent hanging (30 seconds max per position)
+        const timeoutId = setTimeout(() => {
+          console.warn('Analysis timeout for position:', fen);
+          setIsAnalyzing(false);
+          if (currentAnalysisRef.current.fen === fen) {
+            resolve({
+              fen,
+              evaluation: currentAnalysisRef.current.evaluation || 0,
+              bestMove: currentAnalysisRef.current.bestMove || '',
+              pvLine: currentAnalysisRef.current.pvLine || [],
+              depth: currentAnalysisRef.current.depth || 0,
+              mate: currentAnalysisRef.current.mate,
+            });
+            currentAnalysisRef.current = {};
+          }
+        }, 30000);
+
+        // Store timeout ID to clear it later
+        const originalCallback = analysisCallbackRef.current;
+        analysisCallbackRef.current = (analysis: PositionAnalysis) => {
+          clearTimeout(timeoutId);
+          if (originalCallback) {
+            originalCallback(analysis);
+          }
+        };
 
         engineRef.current.postMessage('stop');
         engineRef.current.postMessage(`position fen ${fen}`);
